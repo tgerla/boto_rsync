@@ -24,6 +24,7 @@
 import sys, os, time, datetime, argparse, threading, signal
 from fnmatch import fnmatch
 import boto
+import hashlib
 
 __version__ = '0.8.1'
 
@@ -71,6 +72,17 @@ def convert_bytes(n):
             return "%.1f%s" % (n, x)
         n /= 1024.0
     return "%.1f%s" % (n, x)
+
+def md5_for_file(fn, block_size=2**20):
+    f = open(fn)
+    md5 = hashlib.md5()
+    while True:
+        data = f.read(block_size)
+        if not data:
+            break
+        md5.update(data)
+    f.close()
+    return md5.hexdigest() 
 
 def spinner(event, every):
     """Animates an ASCII spinner."""
@@ -457,7 +469,7 @@ def main():
                     if glob and not fnmatch(key.name.split('/')[-1], glob):
                         continue
                     
-                    keys[key.name] = key.size
+                    keys[key.name] = key.etag[1:-1]
             except Exception, e:
                 raise e
             finally:
@@ -541,6 +553,7 @@ def main():
                     fullpath = os.path.join(root, file)
                     key_name = cloud_path + get_key_name(fullpath, path)
                     file_size = os.path.getsize(fullpath)
+                    file_md5 = md5_for_file(fullpath)
                     
                     if file_size == 0:
                         if ignore_empty:
@@ -559,10 +572,10 @@ def main():
                                     fullpath[len(path):].lstrip(os.sep)
                                     )
                             continue
-                        elif keys[key_name] == file_size:
+                        elif keys[key_name] == file_md5:
                             if not quiet:
                                 sys.stdout.write(
-                                    'Skipping %s (size matches)\n' %
+                                    'Skipping %s (md5 matches)\n' %
                                     fullpath[len(path):].lstrip(os.sep)
                                     )
                             continue
@@ -980,7 +993,7 @@ def main():
                     if not quiet:
                         if rename:
                             sys.stdout.write(
-                                'Skipping %s -> %s (size matches)\n' %
+                                'Skipping %s -> %s (checksum matches)\n' %
                                 keypath.split('/')[-1], fullpath.split('/')[-1]
                                 )
                         else:
